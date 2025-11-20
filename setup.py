@@ -3,7 +3,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = "vehicle_controller"
+package_name = "monosim"
 
 setup(
     name=package_name,
@@ -41,9 +41,9 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "mpc_control = vehicle_controller.mpc_control_node:main",
-            "pid_control = vehicle_controller.pid_control_node:main",
-            "odometry_plotter = vehicle_controller.odometry_plotter_node:main",
+            "mpc_control = monosim.mpc_control_node:main",
+            "pid_control = monosim.pid_control_node:main",
+            "odometry_plotter = monosim.odometry_plotter_node:main",
         ],
     },
 )

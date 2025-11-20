@@ -13,7 +13,7 @@ def generate_launch_description():
         "world_file",
         default_value=PathJoinSubstitution(
             [
-                FindPackageShare("vehicle_controller"),
+                FindPackageShare("monosim"),
                 "worlds",
                 "track00.world.xml",
             ]
@@ -30,7 +30,7 @@ def generate_launch_description():
 
     # Include simulation launch file
     simulation_launch_path = PathJoinSubstitution(
-        [FindPackageShare("vehicle_controller"), "launch", "simulation.launch.py"]
+        [FindPackageShare("monosim"), "launch", "simulation.launch.py"]
     )
 
     include_simulation_launch = IncludeLaunchDescription(
@@ -48,7 +48,7 @@ def generate_launch_description():
 
     # Run pid node
     mpc_node = Node(
-        package="vehicle_controller",
+        package="monosim",
         executable="mpc_control",
         name="mpc_control_node",
         output="screen",
@@ -57,7 +57,7 @@ def generate_launch_description():
 
     # Run odometry plotter
     odom_plotter_node = Node(
-        package="vehicle_controller",
+        package="monosim",
         executable="odometry_plotter",
         name="odometry_plotter_node",
         output="screen",

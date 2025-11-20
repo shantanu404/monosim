@@ -14,12 +14,12 @@ V_DES = 2.5  # desired cruise speed
 
 # Weights for the quadratic cost
 Q_LATERAL = 20.0  # lateral (y) tracking
-Q_HEADING = 10.0  # heading tracking
-Q_SPEED = 10.0  # speed tracking
-R_ACCEL = 0.1  # minimise |accel|
-R_STEER = 0.1  # minimise |steer|
-R_DACCEL = 10.0  # smooth accel (Δa)
-R_DSTEER = 10.0  # smooth steer (Δδ)
+Q_HEADING = 20.0  # heading tracking
+Q_SPEED = 5.0  # speed tracking
+R_ACCEL = 0.5  # minimise |accel|
+R_STEER = 0.5  # minimise |steer|
+R_DACCEL = 5.0  # smooth accel (Δa)
+R_DSTEER = 5.0  # smooth steer (Δδ)
 
 
 def do_mpc(

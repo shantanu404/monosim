@@ -8,6 +8,7 @@ import matplotlib.animation as anim  # Import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
 import rclpy
+import std_msgs.msg  # Add this import at the top
 from nav_msgs.msg import Odometry
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -26,10 +27,8 @@ class OdometryPlotterNode(Node):
         self.v_data = []
         self.w_data = []
         self.times = []
+        self.lane_error = 0.0  # Store latest lane error
         self._lock = threading.Lock()
-        self.csv_file_path = os.path.join(
-            os.getenv("HOME", ""), ".ros/odometry_data.csv"
-        )
         self.animation_interval = 100
 
         # Set up the Matplotlib figure and axes (5 subplots)
@@ -58,6 +57,10 @@ class OdometryPlotterNode(Node):
         )
         self.get_logger().info("Subscribed to /base_pose_ground_truth topic.")
 
+        self.lane_error_sub = self.create_subscription(
+            std_msgs.msg.Float32, "/ego/pid_lane_error", self.lane_error_callback, 1
+        )
+
         # Initialize FuncAnimation
         self.ani = anim.FuncAnimation(
             self.fig,
@@ -65,6 +68,19 @@ class OdometryPlotterNode(Node):
             interval=self.animation_interval,
             blit=False,  # Blitting can cause issues with some backends, set to False
         )
+
+        # Set up the CSV file path
+        self.csv_file_path = os.path.join(
+            os.getenv("HOME", ""), ".ros/odometry_data.csv"
+        )
+        self.csvfile = open(self.csv_file_path, "w")
+        self.csvwriter = csv.writer(self.csvfile)
+        self.csvwriter.writerow(
+            ["Time", "X", "Y", "Yaw", "Velocity", "Angular Velocity", "Lane Error"]
+        )
+
+    def lane_error_callback(self, msg):
+        self.lane_error = msg.data
 
     def odom_callback(self, msg):
         # Extract data from the Odometry message
@@ -81,6 +97,9 @@ class OdometryPlotterNode(Node):
         )
         w = msg.twist.twist.angular.z
         timestamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+
+        # Write to CSV with lane error
+        self.csvwriter.writerow([timestamp, x, y, o, v, w, self.lane_error])
 
         # Append data to lists using the lock
         with self._lock:
@@ -159,35 +178,9 @@ class OdometryPlotterNode(Node):
             self.wpoints,
         )  # Return the updated plot elements
 
-    def write_to_csv(self):
-        with open(self.csv_file_path, "w") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["Time", "X", "Y", "Yaw", "Velocity", "Angular Velocity"])
-            min_length = min(
-                len(self.times),
-                len(self.x_data),
-                len(self.y_data),
-                len(self.o_data),
-                len(self.v_data),
-                len(self.w_data),
-            )
-            for i in range(min_length):
-                writer.writerow(
-                    [
-                        self.times[i],
-                        self.x_data[i],
-                        self.y_data[i],
-                        self.o_data[i],
-                        self.v_data[i],
-                        self.w_data[i],
-                    ]
-                )
-
     def _plt(self):
         plt.show()
-
-        # Write to CSV file
-        self.write_to_csv()
+        self.csvfile.close()
 
 
 def main(args=None):

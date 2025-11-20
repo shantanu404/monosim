@@ -12,7 +12,7 @@ def generate_launch_description():
         "world_file",
         default_value=PathJoinSubstitution(
             [
-                FindPackageShare("vehicle_controller"),
+                FindPackageShare("monosim"),
                 "worlds",
                 "track00.world.xml",
             ]
@@ -43,7 +43,7 @@ def generate_launch_description():
 
     # Run rviz2 node
     rviz_conf_path = PathJoinSubstitution(
-        [FindPackageShare("vehicle_controller"), "config", "demo.rviz"]
+        [FindPackageShare("monosim"), "config", "demo.rviz"]
     )
 
     rviz_node = Node(

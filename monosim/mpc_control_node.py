@@ -10,17 +10,19 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 from visualization_msgs.msg import Marker, MarkerArray
 
-KP = 1
+from .mpc_optimizer import do_mpc
 
 
-class PIDControllerNode(Node):
+class MPCControllerNode(Node):
     def __init__(self):
         super().__init__("mpc_controller")
         self.declare_parameter("velocity", 2.5)
 
         self.bridge = CvBridge()
-        self.error = 0.0
-        self.debug_images = True
+        self.velocity = 0.0
+        self.accelaration = 0.0
+        self.steering_angle = 0.0
+        self.debug_images = False
 
         # Hard-coded warp matrix from notebook
         self.mtx = np.array(
@@ -33,17 +35,22 @@ class PIDControllerNode(Node):
         )
 
         # Marker array for lane markers
-        self.left_fit = np.zeros((4,))
-        self.right_fit = np.zeros((4,))
-        self.mid_fit = np.zeros((4,))
+        self.left_fit = np.array([0, 0, 0])
+        self.right_fit = np.array([0, 0, 0])
+        self.mid_fit = np.array([0, 0, 0])
 
         # Subscribers and publishers
         self.image_sub = self.create_subscription(
             Image, "/camera1/image_raw", self.image_callback, 1
         )
 
+        self.odom_subscription = self.create_subscription(
+            Odometry, "/base_pose_ground_truth", self.odom_callback, qos_profile=2
+        )
+
         self.cmd_pub = self.create_publisher(Twist, "cmd_vel", 1)
         self.marker_pub = self.create_publisher(MarkerArray, "lane_markers", 1)
+        self.traj_pub = self.create_publisher(MarkerArray, "trajectory_markers", 1)
 
         # Timer for publishing commands
         self.create_timer(0.1, self.cmd_timer_callback)
@@ -167,18 +174,19 @@ class PIDControllerNode(Node):
             axis=0,
         )
 
-        # 6. Fit 3rd-degree polynomials
+        # 6. Fit 2nd-degree (quadratic) polynomials
         self.left_fit = np.polyfit(real_left_y, real_left_x, 3)
         self.right_fit = np.polyfit(real_right_y, real_right_x, 3)
         self.mid_fit = (self.left_fit + self.right_fit) / 2
 
-        # 7. Calculate the deviation from the center
-        self.error = (
-            self.mid_fit[0] * bias**3
-            + self.mid_fit[1] * bias**2
-            + self.mid_fit[2] * bias
-            + self.mid_fit[3]
+        # 7. Given the state currently is [0, 0, self.velocity, 0] figure out next 1 seconds in 0.1 second interval
+        (accelaration, steering_angle), trajectory = do_mpc(
+            self.mid_fit, np.array([0.0, 0.0, 0.0, self.velocity]), 10, 0.1
         )
+
+        self.trajectory = trajectory
+        self.accelaration = accelaration
+        self.steering_angle = steering_angle
 
         # 9. Unwarp the output and show it
         if self.debug_images:
@@ -199,12 +207,13 @@ class PIDControllerNode(Node):
 
     def cmd_timer_callback(self):
         # Publish control command
-        vel = self.get_parameter("velocity").get_parameter_value().double_value
-        steering_angle = self.error * KP
+        vel = self.velocity + self.accelaration * 0.1
         cmd = Twist()
         cmd.linear.x = vel
-        cmd.angular.z = steering_angle
-        self.get_logger().info(f"velocity: {vel}, angle: {steering_angle}")
+        cmd.angular.z = self.steering_angle
+        self.get_logger().info(
+            f"velocity: {vel}, accelaration: {self.accelaration}, angle: {self.steering_angle}"
+        )
         self.cmd_pub.publish(cmd)
 
     def marker_timer_callback(self):
@@ -261,10 +270,34 @@ class PIDControllerNode(Node):
         marker_array = MarkerArray(markers=markers)
         self.marker_pub.publish(marker_array)
 
+        markers.clear()
+        for i, point in enumerate(self.trajectory):
+            marker = Marker()
+            marker.header.frame_id = "front_axle"
+            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.ns = "trajectory_marker"
+            marker.id = len(markers)
+            marker.type = Marker.SPHERE
+            marker.pose.position.x = point[0]
+            marker.pose.position.y = point[1]
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.1
+            marker.scale.y = 0.1
+            marker.scale.z = 0.1
+            marker.color.r = 0.0
+            marker.color.g = 0.0
+            marker.color.b = 1.0
+            marker.color.a = 1.0
+            marker.lifetime = Duration(seconds=1)
+            markers.append(marker)
+
+        marker_array = MarkerArray(markers=markers)
+        self.traj_pub.publish(marker_array)
+
 
 def main(args=None):
     rclpy.init(args=args)
-    node = PIDControllerNode()
+    node = MPCControllerNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
